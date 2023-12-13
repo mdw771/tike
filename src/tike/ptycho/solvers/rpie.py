@@ -584,11 +584,11 @@ def _update_position(
     # Undo the multiplication of scaler
     scan = scan / cp.array(position_options.scale)
 
-    if current_epoch < 64:
+    if current_epoch < 0:
         # Calculate scaler gradients dL / da = x^T (dL / d(ax)) and update vector
         adj_x = np.mean(step[:, 0] * scan[:, 0])
         adj_y = np.mean(step[:, 1] * scan[:, 1])
-        lr = 1e-6
+        lr = 1e-7
         step_a = cp.array([adj_x, adj_y])
         (
             step_a,
