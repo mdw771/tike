@@ -1,4 +1,5 @@
 import logging
+import copy
 
 import cupy as cp
 import numpy.typing as npt
@@ -573,6 +574,14 @@ def _update_position(
         (1 - alpha) * position_update_denominator +
         alpha * max(position_update_denominator.max(), 1e-6))
 
+    # Calculate scaler gradients.
+    last_scale = copy.copy(position_options.scale)
+    adj_x = np.mean(step[:, 0] * scan[:, 0])
+    adj_y = np.mean(step[:, 1] * scan[:, 1])
+    lr = 1e-5
+    position_options.scale = tuple([a - lr * adj for a, adj in zip(position_options.scale, [adj_x, adj_y])])
+    print(position_options.scale)
+
     if position_options.update_magnitude_limit > 0:
         step = cp.clip(
             step,
@@ -594,5 +603,12 @@ def _update_position(
         )
 
     scan -= step
+
+    # Apply and update scaling.
+    # scan = scan / cp.array(last_scale) * cp.array(position_options.scale)
+
+    print('extremes of scan')
+    print(np.min(scan, axis=0))
+    print(np.max(scan, axis=0))
 
     return scan, position_options
