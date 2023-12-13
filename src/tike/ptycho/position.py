@@ -336,6 +336,10 @@ class PositionOptions:
     scale: tuple[float, float] = (1.0, 1.0)
     """Probe position scaling."""
 
+    scale_v: tuple[float, float] = None
+
+    scale_m: tuple[float, float] = None
+
     origin: tuple[float, float] = (0, 0)
     """The rotation center of the transformation. This shift is applied to the
     scan positions before computing the global transformation."""
@@ -395,6 +399,8 @@ class PositionOptions:
             update_magnitude_limit=self.update_magnitude_limit,
             transform=self.transform,
             scale=self.scale,
+            scale_m=self.scale_m,
+            scale_v=self.scale_v,
         )
         if self.use_adaptive_moment:
             new._momentum = np.empty((0, 4))
@@ -411,6 +417,8 @@ class PositionOptions:
             update_magnitude_limit=self.update_magnitude_limit,
             transform=self.transform,
             scale=self.scale,
+            scale_m=self.scale_m,
+            scale_v=self.scale_v,
         )
         if self.confidence is not None:
             new.confidence = self.confidence[..., indices, :]
@@ -487,6 +495,8 @@ class PositionOptions:
             update_magnitude_limit=self.update_magnitude_limit,
             transform=self.transform,
             scale=self.scale,
+            scale_m=self.scale_m,
+            scale_v=self.scale_v,
             confidence=self.confidence,
         )
         # Momentum reset to zero when grid scale changes

@@ -175,6 +175,7 @@ def rpie(
             position_options,
             position_update_numerator,
             position_update_denominator,
+            [len(algorithm_options.times)] * comm.pool.num_workers,
             max_shift=probe[0].shape[-1] * 0.1,
             alpha=algorithm_options.alpha,
         )))
@@ -495,9 +496,11 @@ def _get_nearplane_gradients(
                 )  # yapf: disable
 
         if position_options:
-
+            # `patches` is object
             grad_x, grad_y = tike.ptycho.position.gaussian_gradient(patches)
 
+            # diff is Psi' - Psi, where Psi = PO
+            # conj(P) * diff is dL / dO
             position_update_numerator[indices, ..., 0] = cp.sum(
                 cp.real(cp.conj(grad_x * unique_probe) * diff),
                 axis=(-4, -3, -2, -1),
@@ -566,6 +569,7 @@ def _update_position(
     position_options: PositionOptions,
     position_update_numerator: npt.NDArray,
     position_update_denominator: npt.NDArray,
+    current_epoch: int,
     *,
     alpha=0.05,
     max_shift=1,
@@ -574,28 +578,46 @@ def _update_position(
         (1 - alpha) * position_update_denominator +
         alpha * max(position_update_denominator.max(), 1e-6))
 
-    # Calculate scaler gradients.
-    last_scale = copy.copy(position_options.scale)
-    adj_x = np.mean(step[:, 0] * scan[:, 0])
-    adj_y = np.mean(step[:, 1] * scan[:, 1])
-    lr = 1e-5
-    position_options.scale = tuple([a - lr * adj for a, adj in zip(position_options.scale, [adj_x, adj_y])])
-    print(position_options.scale)
+    # `step` is dL / d(ax). To update x, we recover dL / dx by multiplying a.
+    step_r = step * cp.array(position_options.scale)
+
+    # Undo the multiplication of scaler
+    scan = scan / cp.array(position_options.scale)
+
+    if current_epoch < 64:
+        # Calculate scaler gradients dL / da = x^T (dL / d(ax)) and update vector
+        adj_x = np.mean(step[:, 0] * scan[:, 0])
+        adj_y = np.mean(step[:, 1] * scan[:, 1])
+        lr = 1e-6
+        step_a = cp.array([adj_x, adj_y])
+        (
+            step_a,
+            position_options.scale_v,
+            position_options.scale_m,
+        ) = tike.opt.adam(
+            step_a,
+            position_options.scale_v,
+            position_options.scale_m,
+            vdecay=position_options.vdecay,
+            mdecay=position_options.mdecay,
+        )
+        position_options.scale = cp.array(position_options.scale) - step_a * lr
+        print(position_options.scale)
 
     if position_options.update_magnitude_limit > 0:
-        step = cp.clip(
-            step,
+        step_r = cp.clip(
+            step_r,
             a_min=-position_options.update_magnitude_limit,
             a_max=position_options.update_magnitude_limit,
         )
 
     if position_options.use_adaptive_moment:
         (
-            step,
+            step_r,
             position_options.v,
             position_options.m,
         ) = tike.opt.adam(
-            step,
+            step_r,
             position_options.v,
             position_options.m,
             vdecay=position_options.vdecay,
@@ -604,8 +626,8 @@ def _update_position(
 
     scan -= step
 
-    # Apply and update scaling.
-    # scan = scan / cp.array(last_scale) * cp.array(position_options.scale)
+    # Apply updated scaling.
+    scan = scan * cp.array(position_options.scale)
 
     print('extremes of scan')
     print(np.min(scan, axis=0))
