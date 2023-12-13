@@ -578,17 +578,31 @@ def _update_position(
         (1 - alpha) * position_update_denominator +
         alpha * max(position_update_denominator.max(), 1e-6))
 
+    if position_options.update_magnitude_limit > 0:
+        step = cp.clip(
+            step,
+            a_min=-position_options.update_magnitude_limit,
+            a_max=position_options.update_magnitude_limit,
+        )
+
     # `step` is dL / d(ax). To update x, we recover dL / dx by multiplying a.
+    print(position_options.scale)
     step_r = step * cp.array(position_options.scale)
 
     # Undo the multiplication of scaler
-    scan = scan / cp.array(position_options.scale)
+    mean_scan = cp.mean(scan, axis=0)
+    scan = (scan - mean_scan) / cp.array(position_options.scale) + mean_scan
 
-    if current_epoch < 0:
+    if current_epoch < 128:
         # Calculate scaler gradients dL / da = x^T (dL / d(ax)) and update vector
-        adj_x = np.mean(step[:, 0] * scan[:, 0])
-        adj_y = np.mean(step[:, 1] * scan[:, 1])
-        lr = 1e-7
+        adj_x = np.mean(step[:, 0] * (scan[:, 0] - np.mean(scan[:, 0])))
+        adj_y = np.mean(step[:, 1] * (scan[:, 1] - np.mean(scan[:, 1])))
+        # import matplotlib.pyplot as plt
+        # fig, ax = plt.subplots(1, 2)
+        # ax[0].scatter(scan[:, 1].get(), scan[:, 0].get(), c=['#ff0000' if x > 0 else '#0000ff' for x in step[:, 0].get()])
+        # ax[1].scatter(scan[:, 1].get(), scan[:, 0].get(), c=['#ff0000' if x > 0 else '#0000ff' for x in step[:, 1].get()])
+        # plt.show()
+        lr = 1e-2
         step_a = cp.array([adj_x, adj_y])
         (
             step_a,
@@ -604,12 +618,12 @@ def _update_position(
         position_options.scale = cp.array(position_options.scale) - step_a * lr
         print(position_options.scale)
 
-    if position_options.update_magnitude_limit > 0:
-        step_r = cp.clip(
-            step_r,
-            a_min=-position_options.update_magnitude_limit,
-            a_max=position_options.update_magnitude_limit,
-        )
+    # if position_options.update_magnitude_limit > 0:
+    #     step_r = cp.clip(
+    #         step_r,
+    #         a_min=-position_options.update_magnitude_limit,
+    #         a_max=position_options.update_magnitude_limit,
+    #     )
 
     if position_options.use_adaptive_moment:
         (
@@ -624,10 +638,14 @@ def _update_position(
             mdecay=position_options.mdecay,
         )
 
-    scan -= step
+    scan -= step_r
 
     # Apply updated scaling.
-    scan = scan * cp.array(position_options.scale)
+    mean_scan = cp.mean(scan, axis=0)
+    print('mean scan')
+    print(mean_scan)
+    scan = (scan - mean_scan) * cp.array(position_options.scale) + mean_scan
+    print(position_options.scale)
 
     print('extremes of scan')
     print(np.min(scan, axis=0))
