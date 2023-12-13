@@ -602,7 +602,7 @@ def _update_position(
         # ax[0].scatter(scan[:, 1].get(), scan[:, 0].get(), c=['#ff0000' if x > 0 else '#0000ff' for x in step[:, 0].get()])
         # ax[1].scatter(scan[:, 1].get(), scan[:, 0].get(), c=['#ff0000' if x > 0 else '#0000ff' for x in step[:, 1].get()])
         # plt.show()
-        lr = 1e-1
+        lr = 1e-2
         step_a = cp.array([adj_x, adj_y])
         (
             step_a,
