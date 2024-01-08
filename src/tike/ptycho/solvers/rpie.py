@@ -574,6 +574,9 @@ def _update_position(
     alpha=0.05,
     max_shift=1,
 ):
+    debug = False
+    optimize_scale = position_options.optimize_scale
+
     step = (position_update_numerator) / (
         (1 - alpha) * position_update_denominator +
         alpha * max(position_update_denominator.max(), 1e-6))
@@ -585,45 +588,40 @@ def _update_position(
             a_max=position_options.update_magnitude_limit,
         )
 
-    # `step` is dL / d(ax). To update x, we recover dL / dx by multiplying a.
-    print(position_options.scale)
-    step_r = step * cp.array(position_options.scale)
-
-    # Undo the multiplication of scaler
-    mean_scan = cp.mean(scan, axis=0)
-    scan = (scan - mean_scan) / cp.array(position_options.scale) + mean_scan
-
-    if current_epoch < 128:
-        # Calculate scaler gradients dL / da = x^T (dL / d(ax)) and update vector
-        adj_x = np.mean(step[:, 0] * (scan[:, 0] - np.mean(scan[:, 0])))
-        adj_y = np.mean(step[:, 1] * (scan[:, 1] - np.mean(scan[:, 1])))
-        # import matplotlib.pyplot as plt
-        # fig, ax = plt.subplots(1, 2)
-        # ax[0].scatter(scan[:, 1].get(), scan[:, 0].get(), c=['#ff0000' if x > 0 else '#0000ff' for x in step[:, 0].get()])
-        # ax[1].scatter(scan[:, 1].get(), scan[:, 0].get(), c=['#ff0000' if x > 0 else '#0000ff' for x in step[:, 1].get()])
-        # plt.show()
-        lr = 1e-2
-        step_a = cp.array([adj_x, adj_y])
-        (
-            step_a,
-            position_options.scale_v,
-            position_options.scale_m,
-        ) = tike.opt.adam(
-            step_a,
-            position_options.scale_v,
-            position_options.scale_m,
-            vdecay=position_options.vdecay,
-            mdecay=position_options.mdecay,
-        )
-        position_options.scale = cp.array(position_options.scale) - step_a * lr
+    step_r = step
+    if optimize_scale:
+        # `step` is dL / d(ax). To update x, we recover dL / dx by multiplying a.
         print(position_options.scale)
+        step_r = step * cp.array(position_options.scale)
 
-    # if position_options.update_magnitude_limit > 0:
-    #     step_r = cp.clip(
-    #         step_r,
-    #         a_min=-position_options.update_magnitude_limit,
-    #         a_max=position_options.update_magnitude_limit,
-    #     )
+        # Undo the multiplication of scaler
+        mean_scan = cp.mean(scan, axis=0)
+        scan = (scan - mean_scan) / cp.array(position_options.scale) + mean_scan
+
+        if current_epoch < 128:
+            # Calculate scaler gradients dL / da = x^T (dL / d(ax)) and update vector
+            adj_x = np.mean(step[:, 0] * (scan[:, 0] - np.mean(scan[:, 0])))
+            adj_y = np.mean(step[:, 1] * (scan[:, 1] - np.mean(scan[:, 1])))
+            # import matplotlib.pyplot as plt
+            # fig, ax = plt.subplots(1, 2)
+            # ax[0].scatter(scan[:, 1].get(), scan[:, 0].get(), c=['#ff0000' if x > 0 else '#0000ff' for x in step[:, 0].get()])
+            # ax[1].scatter(scan[:, 1].get(), scan[:, 0].get(), c=['#ff0000' if x > 0 else '#0000ff' for x in step[:, 1].get()])
+            # plt.show()
+            lr = 1e-2
+            step_a = cp.array([adj_x, adj_y])
+            (
+                step_a,
+                position_options.scale_v,
+                position_options.scale_m,
+            ) = tike.opt.adam(
+                step_a,
+                position_options.scale_v,
+                position_options.scale_m,
+                vdecay=position_options.vdecay,
+                mdecay=position_options.mdecay,
+            )
+            position_options.scale = cp.array(position_options.scale) - step_a * lr
+            print(position_options.scale)
 
     if position_options.use_adaptive_moment:
         (
@@ -640,15 +638,17 @@ def _update_position(
 
     scan -= step_r
 
-    # Apply updated scaling.
-    mean_scan = cp.mean(scan, axis=0)
-    print('mean scan')
-    print(mean_scan)
-    scan = (scan - mean_scan) * cp.array(position_options.scale) + mean_scan
-    print(position_options.scale)
+    if optimize_scale:
+        # Apply updated scaling.
+        mean_scan = cp.mean(scan, axis=0)
+        if debug:
+            print('mean scan: {}'.format(mean_scan))
+            print('scale: {}'.format(position_options.scale))
+        scan = (scan - mean_scan) * cp.array(position_options.scale) + mean_scan
 
-    print('extremes of scan')
-    print(np.min(scan, axis=0))
-    print(np.max(scan, axis=0))
+        if debug:
+            print('extremes of scan')
+            print(np.min(scan, axis=0))
+            print(np.max(scan, axis=0))
 
     return scan, position_options

@@ -333,12 +333,17 @@ class PositionOptions:
     transform: AffineTransform = AffineTransform()
     """Global transform of positions."""
 
+    optimize_scale: bool = False
+    """Whether to optimize probe position scale."""
+
     scale: tuple[float, float] = (1.0, 1.0)
     """Probe position scaling."""
 
     scale_v: tuple[float, float] = None
+    """Second moment for scale optimization."""
 
     scale_m: tuple[float, float] = None
+    """First momentu for scale optimization."""
 
     origin: tuple[float, float] = (0, 0)
     """The rotation center of the transformation. This shift is applied to the
@@ -398,6 +403,7 @@ class PositionOptions:
             use_position_regularization=self.use_position_regularization,
             update_magnitude_limit=self.update_magnitude_limit,
             transform=self.transform,
+            optimize_scale=self.optimize_scale,
             scale=self.scale,
             scale_m=self.scale_m,
             scale_v=self.scale_v,
@@ -416,9 +422,10 @@ class PositionOptions:
             use_position_regularization=self.use_position_regularization,
             update_magnitude_limit=self.update_magnitude_limit,
             transform=self.transform,
+            optimize_scale=self.optimize_scale,
             scale=self.scale,
             scale_m=self.scale_m,
-            scale_v=self.scale_v,
+            scale_v=self.scale_v
         )
         if self.confidence is not None:
             new.confidence = self.confidence[..., indices, :]
@@ -494,6 +501,7 @@ class PositionOptions:
             use_position_regularization=self.use_position_regularization,
             update_magnitude_limit=self.update_magnitude_limit,
             transform=self.transform,
+            optimize_scale=self.optimize_scale,
             scale=self.scale,
             scale_m=self.scale_m,
             scale_v=self.scale_v,
